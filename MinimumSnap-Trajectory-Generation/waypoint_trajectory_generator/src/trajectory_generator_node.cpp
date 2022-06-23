@@ -7,6 +7,8 @@
 #include <ros/console.h>
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
+#include <mav_msgs/conversions.h>
+#include <mav_msgs/default_topics.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/Point.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -27,7 +29,7 @@ int _dev_order, _min_order;
 
 // ros related
 ros::Subscriber _way_pts_sub;
-ros::Publisher _wp_traj_pub;
+ros::Publisher position_pub;
 
 // for planning
 int _poly_num1D;
@@ -112,8 +114,7 @@ int main(int argc, char** argv)
 
     _way_pts_sub     = nh.subscribe( "waypoints", 1, rcvWaypointsCallBack );
 
-    _wp_traj_pub = nh.advertise<nav_msgs::Path>("trajectory", 1);
-
+    trajectory_pub = nh.advertise<trajectory_msgs::MultiDOFJointTrajectory>(mav_msgs::default_topics::COMMAND_TRAJECTORY, 10);
 
     ros::Rate rate(100);
     bool status = ros::ok();
@@ -129,10 +130,11 @@ int main(int argc, char** argv)
 void visWayPointTraj( MatrixXd polyCoeff, VectorXd time)
 {
     nav_msgs::Path path_msg;
+    trajectory_msgs::MultiDOFJointTrajectory trajectory_msg;
 
     double traj_len = 0.0;
     int count = 0;
-    Vector3d cur, pre;
+    Vector3d cur, pre, d_pos;
     cur.setZero();
     pre.setZero();
 
@@ -147,15 +149,15 @@ void visWayPointTraj( MatrixXd polyCoeff, VectorXd time)
           cur(0) = pt.pose.position.x = pos(0);
           cur(1) = pt.pose.position.y = pos(1);
           cur(2) = pt.pose.position.z = pos(2);
-          std::cout << pos(0) << " " << pos(1) << " " << pos(2) << std::endl;
-          path_msg.poses.push_back(pt);
+          d_pos(pos(0), pos(1), pos(2));
+          mav_msgs::msgMultiDofJointTrajectoryFromPositionYaw(d_pos, 0, &trajectory_msg);
+          position_pub.publish(trajectory_msg);
 
           if (count) traj_len += (pre - cur).norm();
           pre = cur;
         }
     }
     ROS_WARN("Trajectory length is %f m", traj_len);
-    _wp_traj_pub.publish(path_msg);
 }
 
 Vector3d getPosPoly( MatrixXd polyCoeff, int k, double t )
